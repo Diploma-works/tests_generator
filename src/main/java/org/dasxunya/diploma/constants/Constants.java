@@ -32,12 +32,17 @@ public class Constants {
         }
 
         public static class Code {
+            public static String space = " ";
             public static String semiColon = ";";
             public static String openBrace = "{\n";
             public static String closeBrace = "}\n";
             public static final String newLine = "\n";
             public static String semiColonNewLine = ";\n";
             public static final String tabulation = "\t";
+            public static final String regionOpen = "//region ";
+            public static final String regionClose = "// endregion";
+            public static final String annotationBeforeEach = "@BeforeEach";
+            public static final String annotationAfterEach = "@AfterEach";
         }
 
         public static class Types {

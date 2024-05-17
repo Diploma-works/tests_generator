@@ -77,16 +77,16 @@ public class UnitTestsPlugin extends AnAction {
         try {
             Project project = anActionEvent.getProject();
             PsiElement psiElement = anActionEvent.getData(CommonDataKeys.PSI_ELEMENT);
+
             if (psiElement == null || project == null) {
                 return; // Early exit if no project or element
             }
             PsiDirectory psiDirectory = psiElement.getContainingFile().getContainingDirectory();
             if (psiDirectory == null) {
-                throw new NullPointerException();
+                throw new NullPointerException("Не удалось получить директорию проекта");
             }
-            this.generator.generate(project, psiElement, psiDirectory, TestType.UNIT);
-            //String unitTestStr = this.generator.generate(anActionEvent.getData(CommonDataKeys.PSI_ELEMENT), TestType.UNIT);
-            //println(unitTestStr);
+            this.generator.generate(project, psiElement, psiDirectory, TestType.PARAMETERIZED);
+
         } catch (Exception ex) {
             showMessage(anActionEvent.getProject(), ex.getMessage());
         }

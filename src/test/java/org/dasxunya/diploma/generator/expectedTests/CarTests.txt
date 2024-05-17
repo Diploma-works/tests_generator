@@ -1,0 +1,63 @@
+package org.dasxunya.diploma.generator.actualTests;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.*;
+import org.junit.jupiter.params.provider.*;
+class CarTests {
+
+//region Поля
+	Car car;
+// endregion
+@BeforeEach
+void setUp() {
+	this.car = new Car("exampleString", "exampleString", 0, 0.0);
+}
+@ParameterizedTest
+@CsvSource({
+    "exampleString, exampleString, 0, 0.0",
+    "exampleString, exampleString, 0, 0.0"
+})
+public void testCar(String brand, String model, int year, double price) {
+	// TODO: Тестирование логики
+	Assertions.assertEquals(brand, "exampleString");
+	Assertions.assertEquals(model, "exampleString");
+	Assertions.assertEquals(year, 0);
+	Assertions.assertEquals(price, 0.0);
+	// TODO: Добавить другие проверки
+}
+@ParameterizedTest
+@CsvSource({
+    "exampleString, 0, true, 0, 'a', 0, 0, 0.0f, 0.0",
+    "exampleString, 0, true, 0, 'a', 0, 0, 0.0f, 0.0"
+})
+public void testVoidMethod(String str, int i, boolean flag, byte b, char c, short s, long l, float f, double d) {
+	// TODO: Тестирование логики
+	Assertions.assertEquals(str, "exampleString");
+	Assertions.assertEquals(i, 0);
+	Assertions.assertEquals(flag, true);
+	Assertions.assertEquals(b, 0);
+	Assertions.assertEquals(c, 'a');
+	Assertions.assertEquals(s, 0);
+	Assertions.assertEquals(l, 0);
+	Assertions.assertEquals(f, 0.0f);
+	Assertions.assertEquals(d, 0.0);
+	// TODO: Добавить другие проверки
+}
+@Test
+public void testNoParamMethod() {
+	// TODO: Тестирование логики
+	Assertions.assertNotNull(car.noParamMethod());
+	// TODO: Добавить другие проверки
+}
+@ParameterizedTest
+@CsvSource({
+    "exampleString, 0, true, 0, 'a', 0, 0, 0.0f, 0.0",
+    "exampleString, 0, true, 0, 'a', 0, 0, 0.0f, 0.0"
+})
+public void testReturnMethod(String str, int i, boolean flag, byte b, char c, short s, long l, float f, double d) {
+	// TODO: Тестирование логики
+	Assertions.assertTrue(car.returnMethod(str, i, flag, b, c, s, l, f, d));
+	Assertions.assertFalse(car.returnMethod(str, i, flag, b, c, s, l, f, d));
+	// TODO: Добавить другие проверки
+}
+}
+

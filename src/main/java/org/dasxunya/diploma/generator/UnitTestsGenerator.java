@@ -1,5 +1,6 @@
 package org.dasxunya.diploma.generator;
 
+import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 //import lombok.Getter;
@@ -110,7 +111,7 @@ public class UnitTestsGenerator {
         this.append(sb, null, content, suffix);
     }
 
-    public String generateExampleData(PsiType type) {
+    public String generateExampleData(PsiType type, boolean isWrapString) {
         String typeName = type.getPresentableText();
         switch (typeName) {
             case "int":
@@ -118,6 +119,8 @@ public class UnitTestsGenerator {
             case "double":
                 return "0.0";
             case "String":
+                if (isWrapString)
+                    return "\"exampleString\"";
                 return "exampleString";
             case "boolean":
                 return "true";
@@ -136,6 +139,10 @@ public class UnitTestsGenerator {
         }
     }
 
+    public String generateExampleData(PsiType type) {
+        return generateExampleData(type, false);
+    }
+
     public String getMethodCallString(PsiMethod psiMethod) throws NullPointerException {
         if (psiMethod == null)
             throwNullPointerException(PsiMethod.class);
@@ -146,6 +153,22 @@ public class UnitTestsGenerator {
             for (PsiParameter parameter : parameters) {
                 String name = parameter.getName();
                 parameterCalls.add(name);
+            }
+            return String.format("%s(%s)", methodName, parameterCalls);
+        }
+        return null;
+    }
+
+    public String getMethodCallWithConstantsString(PsiMethod psiMethod) throws NullPointerException {
+        if (psiMethod == null)
+            throwNullPointerException(PsiMethod.class);
+        if (psiMethod != null) {
+            String methodName = psiMethod.getName();
+            PsiParameter[] parameters = psiMethod.getParameterList().getParameters();
+            StringJoiner parameterCalls = new StringJoiner(", ");
+            for (PsiParameter parameter : parameters) {
+                String name = parameter.getName();
+                parameterCalls.add(this.generateExampleData(parameter.getType(), true));
             }
             return String.format("%s(%s)", methodName, parameterCalls);
         }
@@ -187,7 +210,8 @@ public class UnitTestsGenerator {
         return stringBuilder.toString();
     }
 
-    private String generateMethodAssert(PsiMethod psiMethod) throws NullPointerException {
+    @SuppressWarnings("UnstableApiUsage")
+    private String generateMethodAssert(String prefix, PsiMethod psiMethod) throws NullPointerException {
         if (psiMethod == null) throwNullPointerException(PsiMethod.class);
         StringBuilder sb = new StringBuilder();
         if (psiMethod != null) {
@@ -202,9 +226,10 @@ public class UnitTestsGenerator {
             }
             //endregion
             if (returnType == null)
-                throwNullPointerException(PsiType.class);
+                returnType = PsiType.VOID;
+            //throwNullPointerException(PsiType.class);
             //region Выбор утверждения в зависимости от типа возвращаемого значения
-            String methodCallText = String.format("%s(%s)", methodName, parameterCalls);
+            String methodCallText = String.format("%s%s(%s)", prefix, methodName, parameterCalls);
             if (returnType != null) {
                 String returnTypeText = returnType.getCanonicalText();
                 switch (returnTypeText.toLowerCase()) {
@@ -242,6 +267,10 @@ public class UnitTestsGenerator {
         }
 
         return sb.toString();
+    }
+
+    private String generateMethodAssert(PsiMethod psiMethod) throws NullPointerException {
+        return this.generateMethodAssert("", psiMethod);
     }
 
     @SuppressWarnings({"StringBufferReplaceableByString", "DataFlowIssue"})
@@ -283,7 +312,7 @@ public class UnitTestsGenerator {
      * @param psiClass
      * @return
      */
-    public String getClassHeader(PsiClass psiClass, TestType testType) {
+    public String getClassHeader(String testClassName, PsiClass psiClass, TestType testType) {
         if (psiClass == null) this.throwNullPointerException(PsiClass.class);
         StringBuilder stringBuilder = new StringBuilder();
         //region Список добавляемых библиотек и сборок
@@ -306,9 +335,15 @@ public class UnitTestsGenerator {
             stringBuilder.append(String.format("import %s;\n", importStr));
         //endregion
         //region Формирование имени класса
-        stringBuilder.append(String.format("class %sTests", psiClass.getName()));
+        stringBuilder.append(String.format("class %s", testClassName));
+        if (!testClassName.contains("Tests"))
+            stringBuilder.append("Tests");
         //endregion
         return stringBuilder.toString();
+    }
+
+    public String getClassHeader(PsiClass psiClass, TestType testType) {
+        return getClassHeader(psiClass.getName(), psiClass, testType);
     }
 
     // Метод для генерации тестового класса для всех методов в классе
@@ -317,36 +352,64 @@ public class UnitTestsGenerator {
     }
 
     // Перегруженный метод для генерации тестового класса для одного конкретного метода
-    public String generate(PsiClass psiClass, PsiMethod psiMethod, TestType testType) {
+    public String generate(String testClassName, PsiClass psiClass, PsiMethod psiMethod, TestType testType) {
         if (psiClass == null) this.throwNullPointerException(PsiClass.class);
-        StringBuilder stringBuilder = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
         //region Формирование заголовкка класса с импортами
-        stringBuilder.append(this.getClassHeader(psiClass, testType));
+        sb.append(this.getClassHeader(testClassName, psiClass, testType));
         //endregion
         //region Формирование тела тестирующего класса
-        stringBuilder.append("{");
-        stringBuilder.append("\n");
-        if (this.isDebug) stringBuilder.append("// Методы класса:\n");
+        //region Открывающая скобка тела класса
+        sb.append(Constants.Strings.Code.space).append(Constants.Strings.Code.openBrace);
+        sb.append(Constants.Strings.Code.newLine);
+        //endregion
+
+        String psiClassName = psiClass.getName();
+        String testObjectName = psiClassName.equals(psiClassName.toLowerCase()) ? String.format("%sTestObject", psiClassName) : psiClassName.toLowerCase();
+        //region Объевление полей
+        this.append(sb, Constants.Strings.Code.regionOpen, "Поля", Constants.Strings.Code.newLine);
+        this.append(sb, Constants.Strings.Code.tabulation, String.format("%s %s", psiClass.getName(), testObjectName), Constants.Strings.Code.semiColon + Constants.Strings.Code.newLine);
+        this.append(sb, Constants.Strings.Code.regionClose, Constants.Strings.Code.newLine);
+        //endregion
+
+        //region Настройка перед каждым тестом
+        this.append(sb, Constants.Strings.Code.annotationBeforeEach, Constants.Strings.Code.newLine);
+        this.append(sb, "void setUp() ", Constants.Strings.Code.openBrace);
+        if (psiClass.getConstructors().length > 0) {
+            this.append(sb, Constants.Strings.Code.tabulation, String.format("this.%s = new %s", testObjectName, this.getMethodCallWithConstantsString(psiClass.getConstructors()[0])),
+                    Constants.Strings.Code.semiColon + Constants.Strings.Code.newLine);
+        }
+        this.append(sb, "", Constants.Strings.Code.closeBrace);
+        //endregion
+
         if (psiMethod != null) {
-            stringBuilder.append(this.generate(psiMethod, testType));
+            sb.append(this.generate(String.format("this.%s.", testObjectName), psiMethod, testType));
         } else {
             for (PsiMethod method : psiClass.getMethods())
-                stringBuilder.append(this.generate(method, testType));
+                sb.append(this.generate(String.format("%s.", testObjectName), method, testType));
         }
-        stringBuilder.append("}");
-        stringBuilder.append("\n");
+
+        //region Закрывающая скобка тела класса
+        sb.append(Constants.Strings.Code.closeBrace);
+        sb.append(Constants.Strings.Code.newLine);
         //endregion
-        return stringBuilder.toString();
+        // endregion
+        return sb.toString();
+    }
+
+    public String generate(PsiClass psiClass, PsiMethod psiMethod, TestType testType) {
+        return generate(psiClass.getName(), psiClass, psiMethod, testType);
     }
 
     @SuppressWarnings("DataFlowIssue")
-    public String generate(PsiMethod psiMethod, TestType testType) {
+    public String generate(String prefix, PsiMethod psiMethod, TestType testType) {
         //region Проверка ссылки на объект
         if (psiMethod == null) this.throwNullPointerException(PsiMethod.class);
         //endregion
         StringBuilder sb = new StringBuilder();
         //region Вывод отладной информации о методе
-        if (this.isDebug) this.printLn(this.getInfo(psiMethod));
+        if (this.isDebug)
+            this.printLn(this.getInfo(psiMethod));
         //endregion
 
         //region Основные свойства метода
@@ -355,8 +418,6 @@ public class UnitTestsGenerator {
         PsiParameter[] parameters = psiMethod.getParameterList().getParameters();
         String testMethodName = "test" + capitalize(methodName);
         StringJoiner parameterListWithTypes = new StringJoiner(", ");
-
-        StringJoiner parameterNames = new StringJoiner(", ");
         StringJoiner parameterList = new StringJoiner(", ");
         for (PsiParameter parameter : parameters) {
             String parameterType = parameter.getType().getPresentableText();
@@ -386,7 +447,7 @@ public class UnitTestsGenerator {
             sb.append(parameterListWithTypes.toString());
             sb.append(") {\n");
             this.append(sb, Constants.Strings.Code.tabulation, "// TODO: Тестирование логики", Constants.Strings.Code.newLine);
-            this.append(sb, Constants.Strings.Code.tabulation, this.generateMethodAssert(psiMethod).split(Constants.Strings.Code.newLine), Constants.Strings.Code.newLine);
+            this.append(sb, Constants.Strings.Code.tabulation, this.generateMethodAssert(prefix, psiMethod).split(Constants.Strings.Code.newLine), Constants.Strings.Code.newLine);
             this.append(sb, Constants.Strings.Code.tabulation, "// TODO: Добавить другие проверки", Constants.Strings.Code.newLine);
             sb.append("}\n");
             //endregion
@@ -401,10 +462,8 @@ public class UnitTestsGenerator {
             }
             this.append(sb, "@Test", Constants.Strings.Code.newLine);
             this.append(sb, String.format("public void %s() ", testMethodName), Constants.Strings.Code.openBrace);
-//            sb.append(Constants.Strings.Code.openBrace);
             this.append(sb, Constants.Strings.Code.tabulation, "// TODO: Тестирование логики", Constants.Strings.Code.newLine);
-            //this.append(sb, Constants.Strings.Code.tabulation, this.generateMethodAssert(psiMethod), Constants.Strings.Code.newLine);
-            this.append(sb, Constants.Strings.Code.tabulation, this.generateMethodAssert(psiMethod).split(Constants.Strings.Code.newLine), Constants.Strings.Code.newLine);
+            this.append(sb, Constants.Strings.Code.tabulation, this.generateMethodAssert(prefix, psiMethod).split(Constants.Strings.Code.newLine), Constants.Strings.Code.newLine);
             this.append(sb, Constants.Strings.Code.tabulation, "// TODO: Добавить другие проверки", Constants.Strings.Code.newLine);
             sb.append(Constants.Strings.Code.closeBrace);
             //endregion
@@ -414,23 +473,28 @@ public class UnitTestsGenerator {
         return result;
     }
 
-    public String generate(PsiElement element, TestType testType) {
+    public String generate(PsiMethod psiMethod, TestType testType) {
+        return this.generate("", psiMethod, testType);
+    }
+
+    public String generate(String testClassName, PsiElement element, TestType testType) {
         // Элемент является классом
         if (element instanceof PsiClass) {
-            return generate((PsiClass) element, testType);
+            return generate(testClassName, (PsiClass) element, null, testType);
         }
         // Элемент является методом
-        if (element instanceof PsiMethod) {
-            return generate((PsiMethod) element, testType);
+        if (element instanceof PsiMethod currentMethod) {
+            return generate(testClassName, currentMethod.getContainingClass(), currentMethod, testType);
         }
         // Элемент не является ни классом, ни методом
         throw new IllegalArgumentException("Неподдерживаемый тип элемента: " + element.getClass().getName());
     }
 
+
     public void generate(Project project, PsiElement element, PsiDirectory directory, TestType testType) {
-        if (!(element instanceof PsiClass) && !(element instanceof PsiMethod))
+        if (!(element instanceof PsiClass) && !(element instanceof PsiMethod)) {
             throw new IllegalArgumentException(Constants.Strings.Release.Errors.ILLEGAL_ARGUMENT);
-        //"Плагин поддерживает работу толь"
+        }
 
         if (directory == null) {
             System.out.println("PsiDirectory is null");
@@ -438,14 +502,39 @@ public class UnitTestsGenerator {
         }
 
         // Генерация содержимого файла в зависимости от типа теста
-        String fileContent = this.generate(element, testType);
-        String fileName = ((PsiNameIdentifierOwner) element).getName() + "Tests.java";//generateFileName(testType);
 
+        String baseName;
+
+        if (element instanceof PsiClass) {
+            baseName = ((PsiClass) element).getName() + "Tests";
+        } else if (element instanceof PsiMethod) {
+            PsiClass containingClass = ((PsiMethod) element).getContainingClass();
+            baseName = containingClass.getName() + "_" + ((PsiMethod) element).getName() + "Tests";
+        } else {
+            throw new IllegalArgumentException("Unsupported PsiElement type");
+        }
+
+        String fileName = baseName;
+        int counter = 1;
+
+        // Проверка на существование файла и добавление порядковой цифры
+        while (directory.findFile(fileName + Constants.Strings.Extensions.java) != null) {
+            fileName = baseName + counter;
+            counter++;
+        }
+
+        String fileContent = this.generate(fileName, element, testType);
         // Создание PsiFile
-        PsiFile file = PsiFileFactory.getInstance(project).createFileFromText(fileName, fileContent);
 
-        // Добавление файла в директорию
-        directory.add(file);
+        String finalFileName = fileName;
+        WriteCommandAction.runWriteCommandAction(project, () -> {
+            // Создание PsiFile
+            PsiFile file = PsiFileFactory.getInstance(project).createFileFromText(finalFileName + "." + Constants.Strings.Extensions.java, fileContent);
+
+            // Добавление файла в директорию
+            directory.add(file);
+        });
     }
+
     //endregion
 }
